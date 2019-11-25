@@ -1,0 +1,5 @@
+*build*
+trash
+.idea/
+.ipynb_checkpoints/
+
