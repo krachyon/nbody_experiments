@@ -27,7 +27,12 @@ struct SimualationParameters{
     double friction = 0;
 };
 
-struct EulerSimulation
+struct Simulation
+{
+    virtual void step(size_t) = 0;
+};
+
+struct EulerSimulation: public Simulation
 {
     EulerSimulation(SimualationParameters& params, Mref positions, Mref velocities, Mref masses):
             params(params), xs(positions), vs(velocities), masses(masses)
@@ -61,7 +66,7 @@ struct EulerSimulation
     }
 
 
-    virtual void step(size_t iters)
+    void step(size_t iters) override
     {
         for (size_t it = 0; it!=iters; ++it) {
             for (Eigen::Index i = 0; i != xs.rows(); ++i) {
@@ -83,8 +88,48 @@ struct EulerSimulation
 
 };
 
+struct VerletSimulation: public Simulation
+{
+    // y'' = f(x,y)
+    //y_i+1 = 2y_i − y_i−1 + ∆x^2 f (x, y).
+
+    VerletSimulation(SimualationParameters params, Mref xs, Mref vs , Vref mass)
+    : params(params), xs(xs), masses(mass), F{xs.rows(), 2}
+    {
+        assert(xs.rows() == vs.rows() && masses.rows() == vs.rows());
+
+        //first of all, a single step with different integration to fill out xs_2
+        xs_prev = xs;
+        EulerSimulation(params, xs, vs, mass).step(1);
+    }
 
 
+    void step(size_t iters) override {
+        for (size_t _ = 0; _ != iters; ++_) {
+            for (Eigen::Index i = 0; i != xs.rows(); ++i) {
+                for (Eigen::Index j = i; j != xs.rows() && j != i; ++j) {
+                    // particle i feels F,  j feels -F
+                    Eigen::VectorXd diff = xs.row(i) - xs.row(j);
+                    diff = diff / diff.dot(diff);
+                    auto dF = params.G * masses[i] * masses[j] * diff;
+                    F.row(i) += dF;
+                    F.row(j) -= dF;
+                }
+            }
+            //divide columns of F by masses to get acceleration = f(x,y) = y''
+            auto xs_next = 2 * xs_prev - xs + params.dt * F.cwiseQuotient(masses);
+            xs_prev = xs;
+            xs = xs_next;
+        }
+    }
+
+
+    SimualationParameters params;
+    Mref xs;
+    Vref masses;
+    Eigen::MatrixXd xs_prev;
+    Eigen::MatrixXd F;
+};
 
 
 void threading(size_t nthreads = 10)

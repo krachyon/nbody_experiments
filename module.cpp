@@ -14,6 +14,10 @@ py::class_<SimualationParameters>(m, "SimulationParameters")
 py::class_<EulerSimulation>(m, "EulerSimulation")
         .def(py::init<SimualationParameters&, Mref, Mref, Mref>())
         .def("step", &EulerSimulation::step)
+        .def_readwrite("xs", &EulerSimulation::xs)
+        .def_readwrite("ys", &EulerSimulation::vs)
+        .def_readwrite("ms", &EulerSimulation::masses)
+        .def_readwrite("param", &EulerSimulation::params)
         ;
 
 
