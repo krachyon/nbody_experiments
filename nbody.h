@@ -90,11 +90,12 @@ struct EulerSimulation: public Simulation
 
 struct VerletSimulation: public Simulation
 {
+    //TODO broken
     // y'' = f(x,y)
     //y_i+1 = 2y_i − y_i−1 + ∆x^2 f (x, y).
 
     VerletSimulation(SimualationParameters params, Mref xs, Mref vs , Vref mass)
-    : params(params), xs(xs), masses(mass), F{xs.rows(), 2}
+    : params(params), xs(xs), masses(mass), A{xs.rows(), 2}
     {
         assert(xs.rows() == vs.rows() && masses.rows() == vs.rows());
 
@@ -105,19 +106,23 @@ struct VerletSimulation: public Simulation
 
 
     void step(size_t iters) override {
+        A.setZero();
         for (size_t _ = 0; _ != iters; ++_) {
             for (Eigen::Index i = 0; i != xs.rows(); ++i) {
-                for (Eigen::Index j = i; j != xs.rows() && j != i; ++j) {
+                for (Eigen::Index j = 0; j != xs.rows(); ++j) {
+                    if (j==i)
+                        continue;
                     // particle i feels F,  j feels -F
                     Eigen::VectorXd diff = xs.row(i) - xs.row(j);
-                    diff = diff / diff.dot(diff);
-                    auto dF = params.G * masses[i] * masses[j] * diff;
-                    F.row(i) += dF;
-                    F.row(j) -= dF;
+                    diff = diff / pow(diff.norm(),3);
+                    auto dA = -1*params.G * masses[j] * diff;
+                    A.row(i) += dA;
+                    //F.row(j) -= dF;
                 }
             }
-            //divide columns of F by masses to get acceleration = f(x,y) = y''
-            auto xs_next = 2 * xs_prev - xs + params.dt * F.cwiseQuotient(masses);
+            //verlet formula
+            Eigen::MatrixXd xs_next = 2 * xs_prev - xs + pow(params.dt,2) * A;
+
             xs_prev = xs;
             xs = xs_next;
         }
@@ -128,7 +133,7 @@ struct VerletSimulation: public Simulation
     Mref xs;
     Vref masses;
     Eigen::MatrixXd xs_prev;
-    Eigen::MatrixXd F;
+    Eigen::MatrixXd A;
 };
 
 

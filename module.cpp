@@ -20,6 +20,15 @@ py::class_<EulerSimulation>(m, "EulerSimulation")
         .def_readwrite("param", &EulerSimulation::params)
         ;
 
+py::class_<VerletSimulation>(m, "VerletSimulation")
+        .def(py::init<SimualationParameters&, Mref, Mref, Vref>())
+        .def("step", &VerletSimulation::step)
+        .def_readwrite("param", &VerletSimulation::params)
+        .def_readwrite("xs", &VerletSimulation::xs)
+        .def_readwrite("xs_prev", &VerletSimulation::xs_prev)
+        .def_readwrite("A", &VerletSimulation::A)
+        ;
+
 
 
 //test if pybind works
