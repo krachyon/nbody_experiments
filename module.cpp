@@ -29,6 +29,14 @@ py::class_<VerletSimulation>(m, "VerletSimulation")
         .def_readwrite("A", &VerletSimulation::A)
         ;
 
+py::class_<LeapfrogSimulation>(m, "LeapfrogSimulation")
+        .def(py::init<SimualationParameters&, Mref, Mref, Vref>())
+        .def("step", &LeapfrogSimulation::step)
+        .def_readwrite("param", &LeapfrogSimulation::params)
+        .def_readwrite("xs", &LeapfrogSimulation::xs)
+        .def_readwrite("vs", &LeapfrogSimulation::vs)
+        ;
+
 
 
 //test if pybind works
