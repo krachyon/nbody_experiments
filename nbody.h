@@ -17,8 +17,8 @@
 
 namespace py = pybind11;
 
-using VectorType = Eigen::VectorXf;
-using MatrixType = Eigen::MatrixXf;
+using VectorType = Eigen::VectorXd;
+using MatrixType = Eigen::MatrixXd;
 using Mref = py::EigenDRef<MatrixType>;
 using Vref = py::EigenDRef<VectorType>;
 
