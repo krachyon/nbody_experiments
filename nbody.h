@@ -16,8 +16,11 @@
 #pragma GCC diagnostic pop
 
 namespace py = pybind11;
-using Mref = py::EigenDRef<Eigen::MatrixXd>;
-using Vref = py::EigenDRef<Eigen::VectorXd>;
+
+using VectorType = Eigen::VectorXf;
+using MatrixType = Eigen::MatrixXf;
+using Mref = py::EigenDRef<MatrixType>;
+using Vref = py::EigenDRef<VectorType>;
 
 
 struct SimualationParameters{
@@ -37,46 +40,38 @@ struct EulerSimulation: public Simulation
 {
     EulerSimulation(SimualationParameters& params, Mref positions, Mref velocities, Mref masses):
             params(params), xs(positions), vs(velocities), masses(masses)
-            , _dv{xs.rows(), 2}, _dx{xs.rows(), 2}
+            , _dv{xs.rows(), 2}
     {
         assert(xs.rows() == vs.rows() && masses.rows() == vs.rows());
     }
 
     EulerSimulation() = delete;
 
-    inline Eigen::Vector2d accel(Eigen::Index idx) const
+    inline MatrixType& accel(Mref xs)
     {
-        Eigen::Vector2d dv{0., 0.};
-        Eigen::Vector2d x = xs.row(idx);
-        Eigen::Vector2d diff{0., 0.};
-
-
-        Eigen::Index rows = xs.rows();
-        //omp massively decreases performance here. WTF?
-        //#pragma omp parallel for
-        for (Eigen::Index i = 0; i!=rows; ++i) {
-            if (i==idx)
-                continue;
-
-            Eigen::Vector2d const& otherx = xs.row(i);
-            diff = otherx-x;
-            dv += diff / diff.norm() * params.G * masses[i] / (diff.dot(diff) + params.easing);
+        _dv.setZero();
+        for(Eigen::Index i=0; i!= xs.rows(); ++i) {
+            for(Eigen::Index j=i; j!= xs.rows(); ++j)
+            {
+                if(i==j)
+                    continue;
+                auto const diff = xs.row(j)-xs.row(i);
+                auto const norm = diff.norm();
+                auto da = params.G * masses[j] * diff/ (norm*norm*norm + params.easing);
+                _dv.row(i) += da;
+                _dv.row(j) -= da;
+            }
         }
-
-        return dv;
+        return _dv;
     }
 
 
     void step(size_t iters) override
     {
         for (size_t it = 0; it!=iters; ++it) {
-            for (Eigen::Index i = 0; i != xs.rows(); ++i) {
-                _dv.row(i) = accel(i);
-                _dx.row(i) = (params.dt * vs.row(i));
-            }
-            vs += _dv;
+            vs += accel(xs) * params.dt;
             vs -= vs*params.friction;
-            xs += _dx;
+            xs += params.dt * vs;
         }
 
     }
@@ -84,8 +79,7 @@ struct EulerSimulation: public Simulation
     Mref xs;
     Mref vs;
     Vref masses;
-    Eigen::MatrixXd _dv;
-    Eigen::MatrixXd _dx;
+    MatrixType _dv;
 
 };
 
@@ -114,7 +108,7 @@ struct VerletSimulation: public Simulation
                     if (j==i)
                         continue;
                     // particle i feels F,  j feels -F
-                    Eigen::VectorXd diff = xs.row(i) - xs.row(j);
+                    VectorType diff = xs.row(i) - xs.row(j);
                     diff = diff / pow(diff.norm(),3);
                     auto dA = -1*params.G * masses[j] * diff;
                     A.row(i) += dA;
@@ -122,7 +116,7 @@ struct VerletSimulation: public Simulation
                 }
             }
             //verlet formula
-            Eigen::MatrixXd xs_next = 2 * xs_prev - xs + pow(params.dt,2) * A;
+            MatrixType xs_next = 2 * xs_prev - xs + pow(params.dt,2) * A;
 
             xs_prev = xs;
             xs = xs_next;
@@ -133,8 +127,8 @@ struct VerletSimulation: public Simulation
     SimualationParameters params;
     Mref xs;
     Vref masses;
-    Eigen::MatrixXd xs_prev;
-    Eigen::MatrixXd A;
+    MatrixType xs_prev;
+    MatrixType A;
 };
 
 struct LeapfrogSimulation: public Simulation
@@ -144,19 +138,23 @@ struct LeapfrogSimulation: public Simulation
         vs_half{vs.rows(), vs.cols()}, dv{vs.rows(),vs.cols()}
     {
         assert(xs.rows() == vs.rows() && masses.rows() == vs.rows());
+
+        vs_half = vs + accel(xs) * params.dt / 2 ;
     }
 
-    inline Eigen::MatrixXd& accel(Mref xs)
+    inline MatrixType& accel(Mref xs)
     {
         dv.setZero();
         for(Eigen::Index i=0; i!= xs.rows(); ++i) {
-            for(Eigen::Index j=0; j!= xs.rows(); ++j)
+            for(Eigen::Index j=i; j!= xs.rows(); ++j)
             {
                 if(i==j)
                     continue;
                 auto const diff = xs.row(j)-xs.row(i);
                 auto const norm = diff.norm();
-                dv.row(i) += params.G * masses[j] * diff/ (norm*norm*norm + params.easing);
+                auto da = params.G * masses[j] * diff/ (norm*norm*norm + params.easing);
+                dv.row(i) += da;
+                dv.row(j) -= da;
             }
         }
         return dv;
@@ -165,12 +163,16 @@ struct LeapfrogSimulation: public Simulation
     void step(size_t iters) override
     {
         auto const dt = params.dt;
+
         for(size_t _=0;_!=iters;++_) {
-            vs_half = vs + accel(xs) * dt / 2 ;
-            xs += vs_half * params.dt;
-            vs = vs_half + accel(xs) * dt / 2;
-            
-            vs -= vs_half*params.friction;
+//            vs_half = vs + accel(xs) * dt / 2 ;
+//            xs += vs_half * params.dt;
+//            vs = vs_half + accel(xs) * dt / 2;
+//
+//            vs -= vs_half*params.friction;
+            xs += vs_half * dt;
+            vs_half += accel(xs)*dt;
+            vs_half -= vs_half * params.friction;
         }
     }
 
@@ -179,8 +181,8 @@ struct LeapfrogSimulation: public Simulation
     Mref xs;
     Mref vs;
     Vref masses;
-    Eigen::MatrixXd vs_half;
-    Eigen::MatrixXd dv;
+    MatrixType vs_half;
+    MatrixType dv;
 };
 
 
@@ -191,7 +193,7 @@ void threading(size_t nthreads = 10)
     Eigen::initParallel();
 }
 
-void print_matrix(py::EigenDRef<Eigen::MatrixXd> mat)
+void print_matrix(py::EigenDRef<MatrixType> mat)
 {
     std::cout << mat << std::endl;
 }

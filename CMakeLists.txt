@@ -4,6 +4,8 @@ project(experiment)
 set(PYBIND11_CPP_STANDARD -std=c++17)
 set(CMAKE_CXX_STANDARD 17)
 
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -ffast-math -march=native") #-fprofile-use")
+
 set(PYTHON_EXECUTABLE "/usr/bin/python")
 set(PYTHON_LIBRARY "/usr/lib/libpython.so")
 find_package(Python COMPONENTS Development)
