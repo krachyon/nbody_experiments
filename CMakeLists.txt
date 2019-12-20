@@ -12,10 +12,6 @@ find_package(Python COMPONENTS Development)
 find_package(pybind11 REQUIRED)
 find_package(Eigen3 REQUIRED)
 
-
-
-
-
 find_package(OpenMP)
 find_package(Boost)
 
